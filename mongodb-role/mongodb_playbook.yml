@@ -1,0 +1,22 @@
+- name: Get master IP
+  hosts: _infra_server
+  become: true
+  tasks:
+    - name: Set master IP from first host
+      set_fact:
+        mongodb_master_ip: "{{ ansible_host }}"
+      delegate_to: localhost
+      run_once: true
+
+- name: Configuring MongoDB replica
+  hosts: _infra_server
+  become: true
+  vars:
+    mongodb_master_ip: "{{ hostvars[groups['_infra_server'][0]]['ansible_host'] }}"
+  pre_tasks:
+    - name: Set replica IP per host
+      set_fact:
+        mongodb_replica_ip: "{{ ansible_host }}"
+  roles:
+    - mongodb_master_role
+    - mongodb_replica_role

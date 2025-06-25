@@ -1,0 +1,67 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Install MongoDB
+  apt:
+    name: mongodb-org
+    state: present
+    update_cache: yes
+
+- name: Create data directory
+  file:
+    path: /data/db
+    state: directory
+    owner: mongodb
+    group: mongodb
+    mode: '0755'
+
+- name: Copy mongod.conf template
+  template:
+    src: mongod.conf.j2
+    dest: /etc/mongod.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart MongoDB
+
+- name: Start and enable MongoDB service
+  service:
+    name: mongod
+    state: started
+    enabled: yes
+
+- name: Wait for MongoDB to be ready
+  wait_for:
+    host: localhost
+    port: "{{ mongodb_port }}"
+    timeout: 30
+
+# This part was causing the issue — now fixed to use 'private_ip_address'
+- name: Set MongoDB master and replica IPs
+  set_fact:
+    mongodb_master_ip: "{{ hostvars[groups['_infra_server'][0]]['private_ip_address'] }}"
+    mongodb_replica_ip: "{{ private_ip_address }}"
+  when: "'_infra_server' in groups and groups['_infra_server'] | length > 1"
+
+- name: Create replica set initiation script
+  template:
+    src: rs_init.js.j2
+    dest: /tmp/rs_init.js
+
+- name: Wait until MongoDB is ready to accept replica set initiation
+  shell: |
+    mongosh --quiet --eval "db.adminCommand('ping')" || exit 1
+  register: ping_result
+  until: ping_result.rc == 0
+  retries: 10
+  delay: 5
+  delegate_to: "{{ mongodb_master_ip }}"
+  run_once: true
+
+- name: Initiate MongoDB replica set
+  shell: |
+    mongosh --quiet --host {{ mongodb_master_ip }} < /tmp/rs_init.js || echo "Replica set may already be configured"
+  delegate_to: "{{ mongodb_master_ip }}"
+  run_once: true
