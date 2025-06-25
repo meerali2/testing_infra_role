@@ -1,6 +1,5 @@
----
-- name: Restart MongoDB
-  service:
-    name: mongod
-    state: restarted
-
+- name: Wait after MongoDB restart
+  wait_for:
+    host: localhost
+    port: "{{ mongodb_port }}"
+    timeout: 30
