@@ -38,7 +38,6 @@
     port: "{{ mongodb_port }}"
     timeout: 30
 
-# This part was causing the issue — now fixed to use 'private_ip_address'
 - name: Set MongoDB master and replica IPs
   set_fact:
     mongodb_master_ip: "{{ hostvars[groups['_infra_server'][0]]['private_ip_address'] }}"
@@ -52,7 +51,9 @@
 
 - name: Wait until MongoDB is ready to accept replica set initiation
   shell: |
-    mongosh --quiet --eval "db.adminCommand('ping')" || exit 1
+    until mongosh --quiet --eval "db.adminCommand('ping')"; do
+      sleep 5
+    done
   register: ping_result
   until: ping_result.rc == 0
   retries: 10
@@ -60,8 +61,47 @@
   delegate_to: "{{ mongodb_master_ip }}"
   run_once: true
 
-- name: Initiate MongoDB replica set
+- name: Initiate MongoDB replica set with retries
   shell: |
-    mongosh --quiet --host {{ mongodb_master_ip }} < /tmp/rs_init.js || echo "Replica set may already be configured"
+    mongosh --quiet --host {{ mongodb_master_ip }} --eval "
+      try {
+        rs.initiate({
+          _id: '{{ mongodb_replset }}',
+          members: [
+            { _id: 0, host: '{{ mongodb_master_ip }}:27017', priority: 2 },
+            { _id: 1, host: '{{ mongodb_replica_ip }}:27017', priority: 1 }
+          ]
+        })
+      } catch (e) {
+        if (e.codeName === 'AlreadyInitialized') {
+          print('Replica set already initialized');
+        } else {
+          throw e;
+        }
+      }
+    "
+  register: rs_init
+  until: "'ok' in rs_init.stdout"
+  retries: 5
+  delay: 10
+  delegate_to: "{{ mongodb_master_ip }}"
+  run_once: true
+
+- name: Verify replica set status
+  shell: |
+    mongosh --quiet --host {{ mongodb_master_ip }} --eval "
+      var status = rs.status();
+      if (status.members.length == 2 && 
+          status.members.some(m => m.stateStr == 'PRIMARY') && 
+          status.members.some(m => m.stateStr == 'SECONDARY')) {
+        print('ok');
+      } else {
+        print('not ready');
+      }
+    "
+  register: rs_status
+  until: "'ok' in rs_status.stdout"
+  retries: 10
+  delay: 5
   delegate_to: "{{ mongodb_master_ip }}"
   run_once: true
