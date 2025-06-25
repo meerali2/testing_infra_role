@@ -5,7 +5,8 @@ filters:
   instance-state-name: running
 keyed_groups:
   - key: tags.Role
-    prefix: ""  
+    prefix: ""
 compose:
-  mongodb_master_ip: "{{ hostvars[groups['infra_server'][0]].private_ip_address }}"  
-  mongodb_replica_ip: "{{ hostvars[groups['infra_server'][1]].private_ip_address }}"  
+  ansible_host: private_ip_address
+  mongodb_master_ip: "{{ groups['_infra_server'][0] | default(groups['infra_server'][0]) | default('localhost') }}"
+  mongodb_replica_ip: "{{ private_ip_address }}"
