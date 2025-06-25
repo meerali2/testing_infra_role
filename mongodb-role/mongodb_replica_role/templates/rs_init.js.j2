@@ -1,7 +1,2 @@
-rs.initiate({
-  _id: "rs0",
-  members: [
-    { _id: 0, host: "{{ mongodb_master_ip }}:27017" },
-    { _id: 1, host: "{{ mongodb_replica_ip }}:27017" }
-  ]
-});
+// This is now handled directly in the task
+print("Replica set initialization is now handled by the Ansible task directly");
