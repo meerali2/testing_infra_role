@@ -36,7 +36,7 @@
   wait_for:
     host: localhost
     port: "{{ mongodb_port }}"
-    timeout: 30
+    timeout: 60
 
 - name: Set MongoDB master and replica IPs
   set_fact:
@@ -49,15 +49,19 @@
     src: rs_init.js.j2
     dest: /tmp/rs_init.js
 
-- name: Wait until MongoDB is ready to accept replica set initiation
+- name: Wait until MongoDB is fully ready
   shell: |
-    until mongosh --quiet --eval "db.adminCommand('ping')"; do
-      sleep 5
+    for i in {1..30}; do
+      if mongosh --quiet --eval "db.adminCommand('ping')"; then
+        exit 0
+      fi
+      sleep 2
     done
-  register: ping_result
-  until: ping_result.rc == 0
-  retries: 10
-  delay: 5
+    exit 1
+  register: mongo_ready
+  until: mongo_ready.rc == 0
+  retries: 5
+  delay: 10
   delegate_to: "{{ mongodb_master_ip }}"
   run_once: true
 
@@ -67,16 +71,24 @@
       try {
         rs.initiate({
           _id: '{{ mongodb_replset }}',
+          version: 1,
           members: [
             { _id: 0, host: '{{ mongodb_master_ip }}:27017', priority: 2 },
             { _id: 1, host: '{{ mongodb_replica_ip }}:27017', priority: 1 }
           ]
         })
-      } catch (e) {
+      } catch(e) {
+        // If already initialized, force reconfiguration
         if (e.codeName === 'AlreadyInitialized') {
-          print('Replica set already initialized');
+          cfg = rs.conf()
+          cfg.members = [
+            { _id: 0, host: '{{ mongodb_master_ip }}:27017', priority: 2 },
+            { _id: 1, host: '{{ mongodb_replica_ip }}:27017', priority: 1 }
+          ]
+          cfg.version++
+          rs.reconfig(cfg, {force: true})
         } else {
-          throw e;
+          throw e
         }
       }
     "
@@ -87,21 +99,34 @@
   delegate_to: "{{ mongodb_master_ip }}"
   run_once: true
 
-- name: Verify replica set status
+- name: Wait for replica set stabilization
   shell: |
     mongosh --quiet --host {{ mongodb_master_ip }} --eval "
       var status = rs.status();
-      if (status.members.length == 2 && 
-          status.members.some(m => m.stateStr == 'PRIMARY') && 
-          status.members.some(m => m.stateStr == 'SECONDARY')) {
+      if (status.members && 
+          status.members.some(m => m.stateStr === 'PRIMARY') && 
+          status.members.some(m => m.stateStr === 'SECONDARY') &&
+          status.members.every(m => m.health === 1)) {
         print('ok');
       } else {
         print('not ready');
       }
     "
-  register: rs_status
-  until: "'ok' in rs_status.stdout"
+  register: rs_stable
+  until: "'ok' in rs_stable.stdout"
   retries: 10
   delay: 5
   delegate_to: "{{ mongodb_master_ip }}"
   run_once: true
+
+- name: Get final replica set status
+  shell: |
+    mongosh --quiet --host {{ mongodb_master_ip }} --eval "JSON.stringify(rs.status(), null, 2)"
+  register: final_status
+  delegate_to: "{{ mongodb_master_ip }}"
+  run_once: true
+  failed_when: false
+
+- name: Show final status
+  debug:
+    var: final_status.stdout
