@@ -12,7 +12,7 @@ terraform {
 }
 
 module "networking" {
-  source               = "./modules/networking"
+  source               = "./networking"
   vpc_cidr             = var.vpc_cidr
   public_subnet_cidrs  = var.public_subnet_cidrs
   private_subnet_cidrs = var.private_subnet_cidrs
@@ -20,14 +20,14 @@ module "networking" {
 }
 
 module "bastion_host" {
-  source           = "./modules/bastion-host"
+  source           = "./bastion-host"
   public_subnet_id = module.networking.public_subnet_ids[0]
   bastion_sg_id    = module.networking.bastion_sg_id
   key_name         = var.key_name
 }
 
 module "mongodb_servers" {
-  source             = "./modules/mongodb-servers"
+  source             = "./mongodb-servers"
   private_subnet_ids = module.networking.private_subnet_ids
   mongodb_sg_id      = module.networking.mongodb_sg_id
   key_name           = var.key_name
