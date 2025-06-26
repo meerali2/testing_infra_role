@@ -1,5 +1,5 @@
 output "vpc_id" {
-  value = module.vpc.vpc_id
+  value = module.networking.vpc_id
 }
 
 output "bastion_host_public_ip" {
