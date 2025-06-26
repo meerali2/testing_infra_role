@@ -3,6 +3,7 @@ variable "region" {
   type        = string
   default     = "us-west-2"
 }
+
 variable "vpc_cidr" {
   description = "CIDR block for the VPC"
   default     = "10.0.0.0/16"
@@ -25,8 +26,9 @@ variable "availability_zones" {
   type        = list(string)
   default     = ["us-west-2a", "us-west-2b"]
 }
+
 variable "key_name" {
   description = "Name of the SSH key pair to use for instances"
   type        = string
-  default     = "oregon-key" # Default key name
+  default     = "oregon-key"
 }
