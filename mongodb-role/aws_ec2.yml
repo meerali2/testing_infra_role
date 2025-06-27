@@ -8,5 +8,3 @@ keyed_groups:
     prefix: ""
 compose:
   ansible_host: private_ip_address
-  mongodb_master_ip: "{{ groups['_infra_server'][0] | default(groups['infra_server'][0]) | default('localhost') }}"
-  mongodb_replica_ip: "{{ private_ip_address }}"
