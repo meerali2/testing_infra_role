@@ -1,3 +1,10 @@
+---
+- name: Restart MongoDB
+  service:
+    name: mongod
+    state: restarted
+  notify: Wait after MongoDB restart
+
 - name: Wait after MongoDB restart
   wait_for:
     host: localhost
